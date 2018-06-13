@@ -2,6 +2,12 @@ package mapreduce
 
 import (
 	"hash/fnv"
+
+        "io/ioutil"
+        "os"
+	"log"
+
+	"encoding/json"
 )
 
 // doMap manages one map task: it reads one of the input files
@@ -53,6 +59,57 @@ func doMap(
 	//
 	// Remember to close the file after you have written all the values!
 	//
+	var KeyValues []KeyValue
+	var err error
+	
+	//Step1: create map-files, and their array
+	var mapfiles = make([]*os.File, nReduce)
+	var encs = make([]*json.Encoder, nReduce)
+
+	for i:=0; i<nReduce; i++ {
+
+	    Filename := reduceName(jobName, mapTaskNumber, i) // reduceName(jobName, mapTaskNumber, r)
+	    fileCreated, err := os.Create(Filename)
+		
+	    if err!=nil{
+	        log.Fatal("Fail to create file: %s", Filename)
+	    } else{
+	        mapfiles[i] = fileCreated
+		encs[i] = json.NewEncoder(fileCreated)
+		
+		defer mapfiles[i].Close()
+
+	    }	
+
+	}
+
+
+	//Step2: read Key-values from inFile
+        var input []byte;
+
+	input,err = ioutil.ReadFile(inFile)	
+	if err!=nil{
+	    log.Fatal("Fail to read 'inFile:' %s", inFile)
+        }
+	
+	KeyValues = mapF(inFile, string(input))
+
+
+        //Step3: encode each Key-value and put it into according map-file
+
+	for _, kv := range(KeyValues){
+	    r:= ihash(kv.Key) % nReduce
+
+	    //write kv(json style) into map-file
+	    err = encs[r].Encode(&kv)    
+	    if err!=nil{
+	        log.Printf("Fail to write kv:%v in file", kv)
+	    }
+
+	}
+
+	log.Printf("map Finished")
+
 }
 
 func ihash(s string) int {

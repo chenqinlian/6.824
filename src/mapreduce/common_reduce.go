@@ -1,5 +1,13 @@
 package mapreduce
 
+import(
+	"os"
+
+	"encoding/json"
+	"log"
+
+)
+
 // doReduce manages one reduce task: it reads the intermediate
 // key/value pairs (produced by the map phase) for this task, sorts the
 // intermediate key/value pairs by key, calls the user-defined reduce function
@@ -43,4 +51,72 @@ func doReduce(
 	// }
 	// file.Close()
 	//
+
+	var KeyValues map[string][]string
+	KeyValues = make(map[string][]string)
+
+	//Step1: Open all map-files with the same reduce-number postfix => read kv and aggregate into hashmap
+	for i:=0; i<nMap; i++{
+
+	    //1.1 Open File to Read
+	    Filename := reduceName(jobName, i, reduceTaskNumber)	    
+	    FileToopen, err := os.Open(Filename)
+	    if err!=nil{
+	        log.Fatal("Fail to open file: %s", FileToopen)
+	    }
+	    defer FileToopen.Close()
+	    
+	    //1.2 json decoder 
+	    dec := json.NewDecoder(FileToopen)
+
+	    
+	    for{ // each loop, proceed with a kv from given file
+
+	        //1.2.1 read a kv
+	        var kv KeyValue
+	        err := dec.Decode(&kv)
+	        if err!=nil{
+	            break
+	        }
+
+	        //1.2.2 save kv in Hashmap -- KeyValues
+	        _, exists := KeyValues[kv.Key]
+	        if exists {
+	            Values := KeyValues[kv.Key]
+	            Values = append(Values, kv.Value)
+	        } else {
+		    Values := []string{ kv.Value }
+	            KeyValues[kv.Key] = Values
+	        }
+	    }     
+	}
+
+	/*
+	for key, value:= range KeyValues {
+	    log.Println(key, value)
+	}
+	*/
+
+	//Step2: for every <key,[values]> do reduceF => save it in mergefile 
+	//2.1 Create MergeFile
+	Filename := mergeName(jobName, reduceTaskNumber)
+	FileToWrite, err := os.Create(Filename)
+	if err!=nil{
+	    log.Fatal("Fail to create file: %s", FileToWrite)
+	}
+	defer FileToWrite.Close()	
+
+	//2.2 write kv to MergeFile
+	for key, values :=range(KeyValues) {
+	    //2.2.1 get result from reduceF
+	    res := reduceF(key, values)
+
+	    //2.2.2 write result in json form
+	    enc := json.NewEncoder(FileToWrite)
+	    err := enc.Encode(&KeyValue{key, res})
+	    if err!=nil{
+	        log.Fatal("Fail to write kv:%v in file", KeyValue{key, res})
+	    }
+	}	    
+
 }

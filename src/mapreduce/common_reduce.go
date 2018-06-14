@@ -91,11 +91,6 @@ func doReduce(
 	    }     
 	}
 
-	/*
-	for key, value:= range KeyValues {
-	    log.Println(key, value)
-	}
-	*/
 
 	//Step2: for every <key,[values]> do reduceF => save it in mergefile 
 	//2.1 Create MergeFile

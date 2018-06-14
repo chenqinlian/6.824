@@ -108,7 +108,6 @@ func doMap(
 
 	}
 
-	log.Printf("map Finished")
 
 }
 

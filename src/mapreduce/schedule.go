@@ -40,10 +40,22 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 	var wg sync.WaitGroup
 
-	for i:=0; i<ntasks; i++{
-	      
-	    wg.Add(1)
+	var taskChan chan int
 
+	go func(){
+
+	    for i:=0; i<ntasks; i++{
+	        taskChan<-i
+	        wg.Add(1)
+	    }
+
+	    wg.Wait()
+	}()
+
+
+
+	for i:=range(taskChan) {
+	      
 	    worker :=<-registerChan		
 	    
 
@@ -57,24 +69,25 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	        args.File= mapFiles[i]
 	    }
 
-	    go func(worker string, task DoTaskArgs){
+	    go func(worker string, args DoTaskArgs){
 
 	        ok:=call(worker, "Worker.DoTask", &args, nil)
 	        if ok{
+		    wg.Done()
+
+	            go func(){
+		       registerChan<-worker 			
+		    }()
+
 
 	        }else{
-
+		    taskChan<-args.TaskNumber
 	        }	
 
-		//Notice!!, no matter succeed to call or not put worker back to channel!
-	        go func(){
-		   registerChan<-worker 			
-		}()
-		wg.Done()
 
 	    }(worker, args)
 
 	}
 
-	wg.Wait()
+
 }

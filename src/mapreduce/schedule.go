@@ -40,7 +40,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 	var wg sync.WaitGroup
 
-	var taskChan chan int
+	var taskChan = make(chan int)
 
 	go func(){
 

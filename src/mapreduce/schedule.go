@@ -50,6 +50,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	    }
 
 	    wg.Wait()
+	    close(taskChan)
 	}()
 
 

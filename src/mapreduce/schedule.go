@@ -39,7 +39,6 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	//Project1 Part III schedule
 
 	var wg sync.WaitGroup
-
 	var taskChan = make(chan int)
 
 	go func(){
@@ -58,8 +57,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	for i:=range(taskChan) {
 	      
 	    worker :=<-registerChan		
-	    
-
+	   
 	    var args DoTaskArgs		
 	    args.JobName = jobName
 	    args.NumOtherPhase = n_other
@@ -75,12 +73,9 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	        ok:=call(worker, "Worker.DoTask", &args, nil)
 	        if ok{
 		    wg.Done()
-
 	            go func(){
 		       registerChan<-worker 			
 		    }()
-
-
 	        }else{
 		    taskChan<-args.TaskNumber
 	        }	

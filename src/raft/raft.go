@@ -19,6 +19,7 @@ package raft
 
 import "sync"
 import "labrpc"
+import "time"
 
 // import "bytes"
 // import "encoding/gob"
@@ -50,7 +51,50 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
+	//node information, important
+	nodeState 	string
+	term 		int	
+	voteFor		int
+	logs		[]LogEntry
+
+	//time related
+	resetTimer	chan struct{}
+	electionTimer	*time.Timer
+	electionTimeout	time.Duration
+	heartBeatDue	time.Duration
+	
+	//not used in Task2A
+	commitIndex	int
+	lastApplied	int
+	nextIndex	[]int
+	matchIndex	[]int
 }
+
+
+// The following structs are derived from Raft paper:https://pdos.csail.mit.edu/6.824/papers/raft-extended.pdf
+// type logEntry added in Task2A
+type LogEntry struct{
+	term		int
+	index		int
+	command 	interface{}
+}
+
+
+//
+type AppendEntriesArgs struct{
+	term		int
+	leaderId	int
+	prevLogIndex	int
+	prevLogTerm	int
+	entries		[]LogEntry
+}
+
+//
+type AppendEntriesReply struct{
+	term		int
+	success		bool
+}
+
 
 // return currentTerm and whether this server
 // believes it is the leader.
@@ -102,6 +146,10 @@ func (rf *Raft) readPersist(data []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	candidateId	int
+	term		int
+	lastLogIndex	int
+	lastLogTerm	int
 }
 
 //
@@ -110,6 +158,8 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	term		int
+	votGranted	bool
 }
 
 //

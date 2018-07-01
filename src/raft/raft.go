@@ -20,6 +20,7 @@ package raft
 import "sync"
 import "labrpc"
 import "time"
+import "math/rand"
 
 // import "bytes"
 // import "encoding/gob"
@@ -52,7 +53,7 @@ type Raft struct {
 	// state a Raft server must maintain.
 
 	//node information, important
-	nodeState 	string
+	nodeState 	string		//only 3 states exists: "Follower", "Candidate", "Leader"
 	term 		int	
 	voteFor		int
 	logs		[]LogEntry
@@ -61,7 +62,7 @@ type Raft struct {
 	resetTimer	chan struct{}
 	electionTimer	*time.Timer
 	electionTimeout	time.Duration
-	heartBeatDue	time.Duration
+	HBInterval 	time.Duration	//HeartBeat Interval
 	
 	//not used in Task2A
 	commitIndex	int
@@ -103,6 +104,9 @@ func (rf *Raft) GetState() (int, bool) {
 	var term int
 	var isleader bool
 	// Your code here (2A).
+	term = rf.term
+	isleader = (rf.nodeState=="Leader")
+
 	return term, isleader
 }
 
@@ -258,9 +262,29 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// Your initialization code here (2A, 2B, 2C).
 
+	rf.nodeState = "Follower"
+	rf.term = 0
+	rf.voteFor = -1
+	rf.logs = make([]LogEntry,1)
+
+	rf.resetTimer = make(chan struct{})
+	rf.electionTimeout = (400+ time.Duration(rand.Intn(150)))*time.Millisecond
+	rf.electionTimer = time.NewTimer(rf.electionTimeout)
+	rf.HBInterval = 100 *time.Millisecond  
+	
+	//not used right now
+	rf.nextIndex = make([]int, len(peers))
+	rf.matchIndex = make([]int, len(peers))
+	for i := 0; i < len(peers); i++ {
+		rf.matchIndex[i] = len(rf.logs)
+	}
+
+
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
+	// start election
+	//go rf.electionDaemon()	
 
 	return rf
 }

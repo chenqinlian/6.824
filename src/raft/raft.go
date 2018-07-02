@@ -163,7 +163,7 @@ type RequestVoteArgs struct {
 type RequestVoteReply struct {
 	// Your data here (2A).
 	term		int
-	votGranted	bool
+	voteGranted	bool
 }
 
 //
@@ -207,6 +207,84 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	return ok
 }
 
+
+//Task2A: electionDeamon
+func (rf *Raft) electionDaemon(){
+	select{
+		//each time receive heartbeat, timer is reset
+		case <-rf.resetTimer:			
+			rf.electionTimer.Reset(rf.electionTimeout)
+		//once there is a period of time not receving heartbeat, than hold voting for the new leader 
+		case <-rf.electionTimer.C:		 
+			rf.electionTimer.Reset(rf.electionTimeout)
+			rf.nodeState = "Candidate"		
+			go rf.canvassVotes()	//need multithread
+	}
+}
+
+//Task2A: canvassVotes
+func (rf *Raft) canvassVotes(){
+	var voteArgs RequestVoteArgs
+	//rf.fillRequestVoteArgs(&voteArgs)	//TODO: write this functionlater
+
+	//request vote and get replies
+	var wg sync.WaitGroup
+	
+	replies :=make(chan RequestVoteReply)
+	votes:=0
+
+	for i:=0; i<len(rf.peers); i++{
+		//"Candidate" vote for himself
+		if i==rf.me && rf.nodeState=="Candidate"{
+			rf.resetTimer<- struct{}{}		
+			votes++
+		}else{//send request to others
+			var reply RequestVoteReply
+			wg.Add(1)
+			go func(n int){
+				if rf.sendRequestVote(i, &voteArgs, &reply){//TODO: request/reply may fail. use channel to replace for loop
+					replies<- reply
+				} 		
+				wg.Done()
+			}(i)
+		}	
+	}	
+
+	go func(){
+		//wait until getting replies from all nodes
+		//node may fail. This is the reason why using multithread	
+		wg.Wait()
+		close(replies)
+	}()	
+
+
+	for reply :=range(replies){
+		if reply.voteGranted{
+			votes++
+			if votes > len(rf.peers)/2{
+				rf.mu.Lock()
+				rf.nodeState = "Leader"
+				rf.mu.Unlock()
+				//Once leader is elected, send heartbeat regularly
+				//go rf.heartbeatDaemon()	//TODO: write heartbeatDaemon function	
+				return
+			}
+			
+		}	
+
+
+		// the case Candidate=> Follower
+		if reply.term>rf.term{
+			rf.mu.Lock()
+			rf.nodeState = "Follower"
+			rf.voteFor = -1
+			rf.mu.Unlock()
+			return
+		}	
+	}
+
+
+}
 
 //
 // the service using Raft (e.g. a k/v server) wants to start
@@ -284,7 +362,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.readPersist(persister.ReadRaftState())
 
 	// start election
-	//go rf.electionDaemon()	
+	go rf.electionDaemon()	
 
 	return rf
 }

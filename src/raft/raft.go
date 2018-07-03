@@ -173,6 +173,16 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 }
 
+
+
+
+// example AppendEntries RPC handler
+
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply){
+
+}
+
+
 //
 // example code to send a RequestVote RPC to a server.
 // server is the index of the target server in rf.peers[].
@@ -206,6 +216,12 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	return ok
 }
+
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+	return ok
+}
+
 
 
 //Task2A: electionDeamon
@@ -265,8 +281,10 @@ func (rf *Raft) canvassVotes(){
 				rf.mu.Lock()
 				rf.nodeState = "Leader"
 				rf.mu.Unlock()
+
 				//Once leader is elected, send heartbeat regularly
-				//go rf.heartbeatDaemon()	//TODO: write heartbeatDaemon function	
+				go rf.heartbeatDaemon()
+
 				return
 			}
 			
@@ -285,6 +303,53 @@ func (rf *Raft) canvassVotes(){
 
 
 }
+
+//Task2A: heartbeatDaemon
+func (rf *Raft)heartbeatDaemon(){
+	for{
+		_, isLeader :=rf.GetState()
+		if isLeader{
+			
+			for i:=0; i<len(rf.peers); i++{
+				if i==rf.me{
+					rf.resetTimer<- struct{}{}				
+				}else{
+					go rf.heartbeat(i)
+				}
+
+			}
+			time.Sleep(rf.HBInterval)
+		}else{
+			break
+		}
+	}
+	return
+}
+
+//Task2A: heartbeat
+func (rf *Raft)heartbeat(n int){
+	var HBargs AppendEntriesArgs	
+	//rf.fillAppendEntries(&HBargs)
+
+	var reply AppendEntriesReply
+	if rf.sendAppendEntries(n, &HBargs, &reply){
+		if !reply.success{
+			rf.mu.Lock()
+
+			if reply.term>rf.term{
+				rf.term = reply.term
+				rf.nodeState = "follower"
+				rf.voteFor = -1
+			}else{
+				//TODO: As leader, send log to xiaodi
+			}
+
+			rf.mu.Unlock()
+		}
+	}
+}
+
+
 
 //
 // the service using Raft (e.g. a k/v server) wants to start

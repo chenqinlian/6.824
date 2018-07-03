@@ -181,12 +181,43 @@ type AppendEntriesReply struct{
 
 // Task2A: AppendEntries RPC handler
 
-func (rf *Raft) fillAppendEntriesArgs(args *AppendEntriesArgs){
+func (rf *Raft) fillAppendEntriesArgs(args *AppendEntriesArgs, heartbeat bool){
 	// Your code here (2A, 2B).
+	args.term = rf.term
+	args.leaderId = rf.me
+
+	lastLog :=rf.logs[len(rf.logs)-1]
+	args.prevLogIndex = lastLog.index
+	args.prevLogTerm  = lastLog.term
+	
+	//TODO:args.leaderCommit
+	
+	//TODO: temporary style for Task2A
+	if heartbeat{
+		args.entries ==nil
+	}
+
+
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply){
 	// Your code here (2A, 2B).	
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	//if heartbeat, stop self-election timing	
+	if args.entries==nil || len(args.entries)==0 {
+		if args.term >= rf.term{
+			reply.success = true
+			//reply.term = args.term	//TODO:??????
+			rf.nodeState = "follower"			
+
+			rf.resetTimer<- struct{}{}
+		}else{
+			reply.term = rf.term
+			reply.success = false
+		}			
+	}
 }
 
 
@@ -336,7 +367,7 @@ func (rf *Raft)heartbeatDaemon(){
 //Task2A: heartbeat
 func (rf *Raft)heartbeat(n int){
 	var HBargs AppendEntriesArgs	
-	rf.fillAppendEntriesArgs(&HBargs)
+	rf.fillAppendEntriesArgs(&HBargs, true)
 
 	var reply AppendEntriesReply
 	if rf.sendAppendEntries(n, &HBargs, &reply){

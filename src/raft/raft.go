@@ -81,20 +81,6 @@ type LogEntry struct{
 }
 
 
-//
-type AppendEntriesArgs struct{
-	term		int
-	leaderId	int
-	prevLogIndex	int
-	prevLogTerm	int
-	entries		[]LogEntry
-}
-
-//
-type AppendEntriesReply struct{
-	term		int
-	success		bool
-}
 
 
 // return currentTerm and whether this server
@@ -169,17 +155,38 @@ type RequestVoteReply struct {
 //
 // example RequestVote RPC handler.
 //
+func (rf *Raft) fillRequestVoteArgs(args *RequestVoteArgs) {
+	// Your code here (2A, 2B).
+}
+
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 }
 
+// Task2A: AppendEntries
+type AppendEntriesArgs struct{
+	term		int
+	leaderId	int
+	prevLogIndex	int
+	prevLogTerm	int
+	entries		[]LogEntry
+}
+
+// Task2A: AppendEntries
+type AppendEntriesReply struct{
+	term		int
+	success		bool
+}
 
 
+// Task2A: AppendEntries RPC handler
 
-// example AppendEntries RPC handler
+func (rf *Raft) fillAppendEntriesArgs(args *AppendEntriesArgs){
+	// Your code here (2A, 2B).
+}
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply){
-
+	// Your code here (2A, 2B).	
 }
 
 
@@ -241,7 +248,7 @@ func (rf *Raft) electionDaemon(){
 //Task2A: canvassVotes
 func (rf *Raft) canvassVotes(){
 	var voteArgs RequestVoteArgs
-	//rf.fillRequestVoteArgs(&voteArgs)	//TODO: write this functionlater
+	rf.fillRequestVoteArgs(&voteArgs)	//TODO: write this functionlater
 
 	//request vote and get replies
 	var wg sync.WaitGroup
@@ -329,7 +336,7 @@ func (rf *Raft)heartbeatDaemon(){
 //Task2A: heartbeat
 func (rf *Raft)heartbeat(n int){
 	var HBargs AppendEntriesArgs	
-	//rf.fillAppendEntries(&HBargs)
+	rf.fillAppendEntriesArgs(&HBargs)
 
 	var reply AppendEntriesReply
 	if rf.sendAppendEntries(n, &HBargs, &reply){

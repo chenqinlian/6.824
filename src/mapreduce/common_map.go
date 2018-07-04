@@ -2,11 +2,9 @@ package mapreduce
 
 import (
 	"hash/fnv"
-
-        "io/ioutil"
-        "os"
+	"io/ioutil"
 	"log"
-
+	"os"
 	"encoding/json"
 )
 
@@ -14,7 +12,7 @@ import (
 // (inFile), calls the user-defined map function (mapF) for that file's
 // contents, and partitions the output into nReduce intermediate files.
 func doMap(
-	jobName string, // the name of the MapReduce job
+	jobName string,    // the name of the MapReduce job
 	mapTaskNumber int, // which map task this is
 	inFile string,
 	nReduce int, // the number of reduce task that will be run ("R" in the paper)
@@ -59,56 +57,39 @@ func doMap(
 	//
 	// Remember to close the file after you have written all the values!
 	//
-	var KeyValues []KeyValue
-	var err error
-	
-	//Step1: create map-files, and their array
-	var mapfiles = make([]*os.File, nReduce)
-	var encs = make([]*json.Encoder, nReduce)
+	contents, err := ioutil.ReadFile(inFile)
+	if err != nil {
+		log.Printf("read file %s failed", inFile)
+		return
+	}
+	kvs := mapF(inFile, string(contents))
 
-	for i:=0; i<nReduce; i++ {
-
-	    Filename := reduceName(jobName, mapTaskNumber, i) // reduceName(jobName, mapTaskNumber, r)
-	    fileCreated, err := os.Create(Filename)
-		
-	    if err!=nil{
-	        log.Fatal("Fail to create file: %s", Filename)
-	    } else{
-	        mapfiles[i] = fileCreated
-		encs[i] = json.NewEncoder(fileCreated)
-		
-		defer mapfiles[i].Close()
-
-	    }	
-
+	var imm = make([]*os.File, nReduce)
+	var enc = make([]*json.Encoder, nReduce)
+	for i := 0; i < nReduce; i++ {
+		if f, err := os.Create(reduceName(jobName, mapTaskNumber, i)); err != nil {
+			log.Printf("create file %s failed", reduceName(jobName, mapTaskNumber, i))
+		} else {
+			imm[i] = f
+			enc[i] = json.NewEncoder(f)
+		}
 	}
 
-
-	//Step2: read Key-values from inFile
-        var input []byte;
-
-	input,err = ioutil.ReadFile(inFile)	
-	if err!=nil{
-	    log.Fatal("Fail to read 'inFile:' %s", inFile)
-        }
-	
-	KeyValues = mapF(inFile, string(input))
-
-
-        //Step3: encode each Key-value and put it into according map-file
-
-	for _, kv := range(KeyValues){
-	    r:= ihash(kv.Key) % nReduce
-
-	    //write kv(json style) into map-file
-	    err = encs[r].Encode(&kv)    
-	    if err!=nil{
-	        log.Printf("Fail to write kv:%v in file", kv)
-	    }
-
+	for _, kv := range kvs {
+		r := ihash(kv.Key) % nReduce
+		if enc[r] != nil {
+			if err := enc[r].Encode(&kv); err != nil {
+				log.Printf("wirte %v to file %s failed", kv, reduceName(jobName, mapTaskNumber, r))
+			}
+		}
 	}
 
-
+	// close immediate files
+	for i := 0; i < nReduce; i++ {
+		if imm[i] != nil {
+			imm[i].Close()
+		}
+	}
 }
 
 func ihash(s string) int {

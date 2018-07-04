@@ -1,11 +1,10 @@
 package mapreduce
 
-import(
+import (
 	"os"
-
-	"encoding/json"
 	"log"
-
+	"encoding/json"
+	"sort"
 )
 
 // doReduce manages one reduce task: it reads the intermediate
@@ -13,10 +12,10 @@ import(
 // intermediate key/value pairs by key, calls the user-defined reduce function
 // (reduceF) for each key, and writes the output to disk.
 func doReduce(
-	jobName string, // the name of the whole MapReduce job
+	jobName string,       // the name of the whole MapReduce job
 	reduceTaskNumber int, // which reduce task this is
-	outFile string, // write the output here
-	nMap int, // the number of map tasks that were run ("M" in the paper)
+	outFile string,       // write the output here
+	nMap int,             // the number of map tasks that were run ("M" in the paper)
 	reduceF func(key string, values []string) string,
 ) {
 	//
@@ -51,67 +50,46 @@ func doReduce(
 	// }
 	// file.Close()
 	//
+	var keys []string                   // store all keys in this partition
+	var kvs = make(map[string][]string) // store all key-value pairs from nMap imm files
 
-	var KeyValues map[string][]string
-	KeyValues = make(map[string][]string)
+	// read nMap imm files from map workers
+	for i := 0; i < nMap; i++ {
+		fn := reduceName(jobName, i, reduceTaskNumber)
+		imm, err := os.Open(fn)
+		if err != nil {
+			log.Printf("open immediate file %s failed", fn)
+			continue
+		}
 
-	//Step1: Open all map-files with the same reduce-number postfix => read kv and aggregate into hashmap
-	for i:=0; i<nMap; i++{
+		var kv KeyValue
+		dec := json.NewDecoder(imm)
+		err = dec.Decode(&kv)
+		for err == nil {
+			// is this key seen?
+			if _, ok := kvs[kv.Key]; !ok {
+				keys = append(keys, kv.Key)
+			}
+			kvs[kv.Key] = append(kvs[kv.Key], kv.Value)
 
-	    //1.1 Open File to Read
-	    Filename := reduceName(jobName, i, reduceTaskNumber)	    
-	    FileToopen, err := os.Open(Filename)
-	    if err!=nil{
-	        log.Fatal("Fail to open file: %s", FileToopen)
-	    }
-	    defer FileToopen.Close()
-	    
-	    //1.2 json decoder 
-	    dec := json.NewDecoder(FileToopen)
-
-	    
-	    for{ // each loop, proceed with a kv from given file
-
-	        //1.2.1 read a kv
-	        var kv KeyValue
-	        err := dec.Decode(&kv)
-	        if err!=nil{
-	            break
-	        }
-
-	        //1.2.2 save kv in Hashmap -- KeyValues
-	        _, exists := KeyValues[kv.Key]
-	        if exists {
-	            Values := KeyValues[kv.Key]
-	            Values = append(Values, kv.Value)
-	        } else {
-		    Values := []string{ kv.Value }
-	            KeyValues[kv.Key] = Values
-	        }
-	    }     
+			// decode repeatedly until an error
+			err = dec.Decode(&kv)
+		}
 	}
 
-
-	//Step2: for every <key,[values]> do reduceF => save it in mergefile 
-	//2.1 Create MergeFile
-	Filename := mergeName(jobName, reduceTaskNumber)
-	FileToWrite, err := os.Create(Filename)
-	if err!=nil{
-	    log.Fatal("Fail to create file: %s", FileToWrite)
+	// Original MapReduce Paper 4.2 Ordering Guarantees
+	// Keys in one partition are processed in increasing key order
+	sort.Strings(keys)
+	out, err := os.Create(outFile)
+	if err != nil {
+		log.Printf("create output file %s failed", outFile)
+		return
 	}
-	defer FileToWrite.Close()	
-
-	//2.2 write kv to MergeFile
-	for key, values :=range(KeyValues) {
-	    //2.2.1 get result from reduceF
-	    res := reduceF(key, values)
-
-	    //2.2.2 write result in json form
-	    enc := json.NewEncoder(FileToWrite)
-	    err := enc.Encode(&KeyValue{key, res})
-	    if err!=nil{
-	        log.Fatal("Fail to write kv:%v in file", KeyValue{key, res})
-	    }
-	}	    
-
+	enc := json.NewEncoder(out)
+	for _, key := range keys {
+		if err = enc.Encode(KeyValue{key, reduceF(key, kvs[key])}); err != nil {
+			log.Printf("write [key: %s] to file %s failed", key, outFile)
+		}
+	}
+	out.Close()
 }

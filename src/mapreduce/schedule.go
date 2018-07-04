@@ -1,7 +1,10 @@
 package mapreduce
 
-import "fmt"
-import "sync"
+import (
+	"fmt"
+	"sync"
+	"log"
+)
 
 //
 // schedule() starts and waits for all tasks in the given phase (Map
@@ -30,60 +33,55 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	// them have been completed successfully should the function return.
 	// Remember that workers may fail, and that any given worker may finish
 	// multiple tasks.
-	//
-	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-	//
-	fmt.Printf("Schedule: %v phase done\n", phase)
 
-	
-	//Project1 Part III schedule
-
+	// schedule will wait until all worker has done their jobs
 	var wg sync.WaitGroup
+
+	// RPC call parameter
+	var task DoTaskArgs
+	task.JobName = jobName
+	task.NumOtherPhase = n_other
+	task.Phase = phase
+
+	// task id will get from this channel
 	var taskChan = make(chan int)
-
-	go func(){
-
-	    for i:=0; i<ntasks; i++{
-	        taskChan<-i
-	        wg.Add(1)
-	    }
-
-	    wg.Wait()
-	    close(taskChan)
+	go func() {
+		for i := 0; i < ntasks; i++ {
+			wg.Add(1)
+			taskChan <- i
+		}
+		// wait all workers have done their job, then close taskChan
+		wg.Wait()
+		close(taskChan)
 	}()
 
+	// assign all task to worker
+	for i := range taskChan {
+		// get a worker from register channel
+		worker := <-registerChan
 
+		task.TaskNumber = i
+		if phase == mapPhase {
+			task.File = mapFiles[i]
+		}
 
-	for i:=range(taskChan) {
-	      
-	    worker :=<-registerChan		
-	   
-	    var args DoTaskArgs		
-	    args.JobName = jobName
-	    args.NumOtherPhase = n_other
-	    args.Phase = phase
-	    args.TaskNumber = i	    
-	
-	    if phase==mapPhase{
-	        args.File= mapFiles[i]
-	    }
+		// Note: must use parameter
+		go func(worker string, task DoTaskArgs) {
+			if call(worker, "Worker.DoTask", &task, nil) {
+				// only successful call will call wg.Done()
+				wg.Done()
 
-	    go func(worker string, args DoTaskArgs){
+				// put worker back to register channel, in another goroutines
+				// to avoid deadlock
+				go func() { registerChan <- worker }()
+			} else {
+				log.Printf("Schedule: assign %s task %v to %s failed", phase,
+					task.TaskNumber, worker)
 
-	        ok:=call(worker, "Worker.DoTask", &args, nil)
-	        if ok{
-		    wg.Done()
-	            go func(){
-		       registerChan<-worker 			
-		    }()
-	        }else{
-		    taskChan<-args.TaskNumber
-	        }	
-
-
-	    }(worker, args)
-
+				// put failed task back to task channel
+				taskChan <- task.TaskNumber
+			}
+		}(worker, task)
 	}
-
-
+	fmt.Printf("Schedule: %v phase done\n", phase)
 }

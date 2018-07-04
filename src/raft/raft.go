@@ -164,9 +164,9 @@ func (rf *Raft) fillRequestVoteArgs(args *RequestVoteArgs) {
 	args.candidateId = rf.me
 	args.term = rf.term
 	
-	lastLog = rf.logs[len(rf.logs)-1]
-	args.lasgLogIndex = lastLog.index
-	args.lasgLogTerm = lastLog.term
+	lastLog := rf.logs[len(rf.logs)-1]
+	args.lastLogIndex = lastLog.index
+	args.lastLogTerm = lastLog.term
 
 }
 
@@ -174,20 +174,20 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// rf = receiver here
 	if args.term< rf.term{
 		reply.term = rf.term
-		voteGranted = true
+		reply.voteGranted = true
 	}else{
 		if args.term>rf.term{
 			rf.term = args.term
 			rf.nodeState = "Follower"
 		}
 
-		lastLog = rf.logs[len(rf.logs)-1]
-		if (rf.state=="Follower" || rf.voteFor==args.candidateId ) && lastLog.term<=args.lastLogTerm && lastLog.index<= args.lasgLogIndex{
+		lastLog := rf.logs[len(rf.logs)-1]
+		if (rf.nodeState=="Follower" || rf.voteFor==args.candidateId ) && lastLog.term<=args.lastLogTerm && lastLog.index<= args.lastLogIndex{
 
 			//rf.nodeState = "Follower"
 			rf.voteFor = args.candidateId
 			reply.voteGranted = true
-			rf.resetTimer<- new struct{}{}
+			rf.resetTimer<-struct{}{}
 		}
 	}
 }
@@ -223,7 +223,7 @@ func (rf *Raft) fillAppendEntriesArgs(args *AppendEntriesArgs, heartbeat bool){
 	
 	//TODO: temporary style for Task2A
 	if heartbeat{
-		args.entries ==nil
+		args.entries == nil
 	}
 
 

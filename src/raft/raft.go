@@ -148,7 +148,7 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
-	term		int
+	term		int		//receiver's term
 	voteGranted	bool
 }
 
@@ -156,11 +156,40 @@ type RequestVoteReply struct {
 // example RequestVote RPC handler.
 //
 func (rf *Raft) fillRequestVoteArgs(args *RequestVoteArgs) {
-	// Your code here (2A, 2B).
+	// Vote for self
+	rf.voteFor = rf.me
+	rf.term +=1
+
+	//fill requests
+	args.candidateId = rf.me
+	args.term = rf.term
+	
+	lastLog = rf.logs[len(rf.logs)-1]
+	args.lasgLogIndex = lastLog.index
+	args.lasgLogTerm = lastLog.term
+
 }
 
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	// Your code here (2A, 2B).
+	// rf = receiver here
+	if args.term< rf.term{
+		reply.term = rf.term
+		voteGranted = true
+	}else{
+		if args.term>rf.term{
+			rf.term = args.term
+			rf.nodeState = "Follower"
+		}
+
+		lastLog = rf.logs[len(rf.logs)-1]
+		if (rf.state=="Follower" || rf.voteFor==args.candidateId ) && lastLog.term<=args.lastLogTerm && lastLog.index<= args.lasgLogIndex{
+
+			//rf.nodeState = "Follower"
+			rf.voteFor = args.candidateId
+			reply.voteGranted = true
+			rf.resetTimer<- new struct{}{}
+		}
+	}
 }
 
 // Task2A: AppendEntries
@@ -205,12 +234,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	//if heartbeat, stop self-election timing	
+	//if heartbeat, stop self-election timing
+	//rf = receiver here	
 	if args.entries==nil || len(args.entries)==0 {
 		if args.term >= rf.term{
 			reply.success = true
 			//reply.term = args.term	//TODO:??????
-			rf.nodeState = "follower"			
+			rf.nodeState = "Follower"			
 
 			rf.resetTimer<- struct{}{}
 		}else{
@@ -376,7 +406,7 @@ func (rf *Raft)heartbeat(n int){
 
 			if reply.term>rf.term{
 				rf.term = reply.term
-				rf.nodeState = "follower"
+				rf.nodeState = "Follower"
 				rf.voteFor = -1
 			}else{
 				//TODO: As leader, send log to xiaodi
@@ -447,6 +477,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.term = 0
 	rf.voteFor = -1
 	rf.logs = make([]LogEntry,1)
+	rf.logs[0].term = 0
 
 	rf.resetTimer = make(chan struct{})
 	rf.electionTimeout = (400+ time.Duration(rand.Intn(150)))*time.Millisecond
